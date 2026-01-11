@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 const app = express();
@@ -28,7 +29,7 @@ async function run() {
     const db = client.db("bookworm");
     const usersCollection = db.collection("users");
 
-    app.post("/user", async (req, res) => {
+    app.post("/user/signup", async (req, res) => {
       const user = req.body;
       if (!user) {
         return res.status(400).send({ message: "User data is required" });
@@ -54,6 +55,40 @@ async function run() {
       res.status(201).send({
         message: "User added successfully",
         insertedId: result.insertedId,
+      });
+    });
+    app.post("/user/login", async (req, res) => {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(401).send({ message: "User data is required" });
+      }
+      const user = await usersCollection.findOne({ email });
+      if (!user) {
+        return res.status(401).send({ message: "Invalid user credentials" });
+      }
+      const isPasswordValid = await bcrypt.compare(
+        password.toString(),
+        user.password
+      );
+      if (!isPasswordValid) {
+        return res.status(401).send({ message: "Invalid user credentials" });
+      }
+
+      const token = jwt.sign(
+        { id: user._id.toString(), email: user.email, role: user.role },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      res.status(201).send({
+        message: "User login successfully",
+        token,
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+        },
       });
     });
     // Send a ping to confirm a successful connection
