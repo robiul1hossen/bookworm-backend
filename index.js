@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const bcrypt = require("bcrypt");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 const app = express();
@@ -23,6 +24,38 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+
+    const db = client.db("bookworm");
+    const usersCollection = db.collection("users");
+
+    app.post("/user", async (req, res) => {
+      const user = req.body;
+      if (!user) {
+        return res.status(400).send({ message: "User data is required" });
+      }
+
+      const email = user.email;
+      const isExisting = await usersCollection.findOne({ email });
+      if (isExisting) {
+        return res.status(400).send({ message: "User already exist" });
+      }
+      const saltRounds = 10;
+      const plainPassword = user.password.toString();
+      const hashedAdminPassword = await bcrypt.hash(plainPassword, saltRounds);
+      const userToDB = {
+        name: user.name,
+        email: user.email,
+        password: hashedAdminPassword,
+        photoURL: user.photoURL,
+        role: "user",
+        createdAt: new Date(),
+      };
+      const result = await usersCollection.insertOne(userToDB);
+      res.status(201).send({
+        message: "User added successfully",
+        insertedId: result.insertedId,
+      });
+    });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
