@@ -61,6 +61,7 @@ async function run() {
     const db = client.db("bookworm");
     const usersCollection = db.collection("users");
     const genresCollection = db.collection("genres");
+    const booksCollection = db.collection("books");
 
     // user related apis
     app.post("/user/signup", async (req, res) => {
@@ -153,6 +154,16 @@ async function run() {
       res.send(result);
     });
 
+    // book related apis
+    app.post("/books", async (req, res) => {
+      const book = req.body;
+      const result = booksCollection.insertOne(book);
+      res.send(result);
+    });
+    app.get("/books", async (req, res) => {
+      const result = await booksCollection.find().toArray();
+      res.send(result);
+    });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
