@@ -60,7 +60,9 @@ async function run() {
 
     const db = client.db("bookworm");
     const usersCollection = db.collection("users");
+    const genresCollection = db.collection("genres");
 
+    // user related apis
     app.post("/user/signup", async (req, res) => {
       const user = req.body;
       if (!user) {
@@ -126,7 +128,6 @@ async function run() {
       });
     });
     app.get("/user/me", verifyToken, async (req, res) => {
-      console.log(req.headers);
       const user = await usersCollection.findOne(
         { _id: new ObjectId(req.user.id) },
         { projection: { password: 0 } }
@@ -134,6 +135,18 @@ async function run() {
 
       res.send({ user });
     });
+    // genres related apis
+    app.post("/genres", async (req, res) => {
+      const genres = req.body;
+      const result = await genresCollection.insertOne(genres);
+      res.send(result);
+    });
+
+    app.get("/genres", async (req, res) => {
+      const result = await genresCollection.find().toArray();
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
