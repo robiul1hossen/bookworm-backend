@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const { ObjectId } = require("mongodb");
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -11,6 +12,37 @@ app.use(express.json());
 app.use(cors());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.zf7rutj.mongodb.net/?appName=Cluster0`;
+
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "1d" }
+  );
+};
+
+// verify jwt
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).send({ message: "Invalid token" });
+  }
+};
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -41,7 +73,7 @@ async function run() {
         return res.status(400).send({ message: "User already exist" });
       }
       const saltRounds = 10;
-      const plainPassword = user.password.toString();
+      const plainPassword = user.password;
       const hashedAdminPassword = await bcrypt.hash(plainPassword, saltRounds);
       const userToDB = {
         name: user.name,
@@ -52,9 +84,18 @@ async function run() {
         createdAt: new Date(),
       };
       const result = await usersCollection.insertOne(userToDB);
+      const newUser = {
+        id: result.insertedId,
+        name: user.name,
+        email: user.email,
+        role: "user",
+      };
+
+      const token = generateToken(newUser);
       res.status(201).send({
-        message: "User added successfully",
-        insertedId: result.insertedId,
+        message: "Signup successful",
+        token,
+        user: newUser,
       });
     });
     app.post("/user/login", async (req, res) => {
@@ -66,30 +107,32 @@ async function run() {
       if (!user) {
         return res.status(401).send({ message: "Invalid user credentials" });
       }
-      const isPasswordValid = await bcrypt.compare(
-        password.toString(),
-        user.password
-      );
+      const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
         return res.status(401).send({ message: "Invalid user credentials" });
       }
 
-      const token = jwt.sign(
-        { id: user._id.toString(), email: user.email, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-      );
+      const token = generateToken(user);
 
-      res.status(201).send({
-        message: "User login successfully",
+      res.status(200).send({
+        message: "Login successful",
         token,
         user: {
           id: user._id,
-          username: user.username,
+          name: user.name,
           email: user.email,
           role: user.role,
         },
       });
+    });
+    app.get("/user/me", verifyToken, async (req, res) => {
+      console.log(req.headers);
+      const user = await usersCollection.findOne(
+        { _id: new ObjectId(req.user.id) },
+        { projection: { password: 0 } }
+      );
+
+      res.send({ user });
     });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
