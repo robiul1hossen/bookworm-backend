@@ -136,6 +136,21 @@ async function run() {
 
       res.send({ user });
     });
+    app.get("/users", async (req, res) => {
+      const result = await usersCollection
+        .find({}, { projection: { password: 0 } })
+        .toArray();
+      res.send(result);
+    });
+    app.patch("/user/role/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const role = req.body;
+      console.log(role);
+      const updatedDoc = { $set: { role: role?.role } };
+      const result = await usersCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
     // genres related apis
     app.post("/genres", async (req, res) => {
       const genres = req.body;
@@ -143,8 +158,19 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/genres", verifyToken, async (req, res) => {
+    app.get("/genres", async (req, res) => {
       const result = await genresCollection.find().toArray();
+      res.send(result);
+    });
+    app.patch("/genres/:id", async (req, res) => {
+      const { id } = req.params;
+      const newGenre = req.body;
+      console.log(newGenre);
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: { ...newGenre },
+      };
+      const result = await genresCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
     app.delete("/genres/:id", async (req, res) => {
@@ -157,7 +183,7 @@ async function run() {
     // book related apis
     app.post("/books", async (req, res) => {
       const book = req.body;
-      const result = booksCollection.insertOne(book);
+      const result = await booksCollection.insertOne(book);
       res.send(result);
     });
     app.get("/books", async (req, res) => {
@@ -180,6 +206,12 @@ async function run() {
         },
       };
       const result = await booksCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+    app.delete("/books/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await booksCollection.deleteOne(query);
       res.send(result);
     });
     // Send a ping to confirm a successful connection
