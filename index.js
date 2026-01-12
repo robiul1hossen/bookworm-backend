@@ -164,6 +164,24 @@ async function run() {
       const result = await booksCollection.find().toArray();
       res.send(result);
     });
+    app.get("/books/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await booksCollection.findOne(query);
+      res.send(result);
+    });
+    app.patch("/books/:id", async (req, res) => {
+      const { id } = req.params;
+      const newBookData = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          ...newBookData,
+        },
+      };
+      const result = await booksCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
