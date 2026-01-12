@@ -142,8 +142,14 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/genres", async (req, res) => {
+    app.get("/genres", verifyToken, async (req, res) => {
       const result = await genresCollection.find().toArray();
+      res.send(result);
+    });
+    app.delete("/genres/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await genresCollection.deleteOne(query);
       res.send(result);
     });
 
