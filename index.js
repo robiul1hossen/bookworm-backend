@@ -166,7 +166,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/genres", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/genres", verifyToken, async (req, res) => {
       const result = await genresCollection.find().toArray();
       res.send(result);
     });
@@ -195,8 +195,38 @@ async function run() {
       res.send(result);
     });
     app.get("/books", verifyToken, async (req, res) => {
-      const result = await booksCollection.find().toArray();
-      res.send(result);
+      const { page = 1, limit = 10, search = "", genre, sort } = req.query;
+      // console.log(req.query);
+      const skip = (Number(page) - 1) * Number(limit);
+      let query = {};
+      if (search) {
+        query.title = { $regex: search, $options: "i" };
+      }
+      if (genre) {
+        query.genres = genre;
+      }
+      let sortQuery = {};
+      if (sort === "rating_asc") {
+        sortQuery.rating = 1;
+      }
+      if (sort === "rating_desc") {
+        sortQuery.rating = -1;
+      }
+      const result = await booksCollection
+        .find(query)
+        .sort(sortQuery)
+        .skip(Number(skip))
+        .limit(Number(limit))
+        .toArray();
+      const total = await booksCollection.countDocuments(query);
+
+      res.send({
+        result,
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPage: Math.ceil(total / limit),
+      });
     });
     app.get("/books/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
