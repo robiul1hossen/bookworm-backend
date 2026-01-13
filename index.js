@@ -44,6 +44,14 @@ const verifyToken = (req, res, next) => {
   }
 };
 
+const verifyAdmin = (req, res, next) => {
+  // console.log(req.role);
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  next();
+};
+
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
@@ -136,13 +144,13 @@ async function run() {
 
       res.send({ user });
     });
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const result = await usersCollection
         .find({}, { projection: { password: 0 } })
         .toArray();
       res.send(result);
     });
-    app.patch("/user/role/:id", async (req, res) => {
+    app.patch("/user/role/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const role = req.body;
@@ -152,17 +160,17 @@ async function run() {
       res.send(result);
     });
     // genres related apis
-    app.post("/genres", async (req, res) => {
+    app.post("/genres", verifyToken, verifyAdmin, async (req, res) => {
       const genres = req.body;
       const result = await genresCollection.insertOne(genres);
       res.send(result);
     });
 
-    app.get("/genres", async (req, res) => {
+    app.get("/genres", verifyToken, verifyAdmin, async (req, res) => {
       const result = await genresCollection.find().toArray();
       res.send(result);
     });
-    app.patch("/genres/:id", async (req, res) => {
+    app.patch("/genres/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const newGenre = req.body;
       console.log(newGenre);
@@ -173,7 +181,7 @@ async function run() {
       const result = await genresCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
-    app.delete("/genres/:id", async (req, res) => {
+    app.delete("/genres/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await genresCollection.deleteOne(query);
@@ -181,22 +189,22 @@ async function run() {
     });
 
     // book related apis
-    app.post("/books", async (req, res) => {
+    app.post("/books", verifyToken, verifyAdmin, async (req, res) => {
       const book = req.body;
       const result = await booksCollection.insertOne(book);
       res.send(result);
     });
-    app.get("/books", async (req, res) => {
+    app.get("/books", verifyToken, async (req, res) => {
       const result = await booksCollection.find().toArray();
       res.send(result);
     });
-    app.get("/books/:id", async (req, res) => {
+    app.get("/books/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await booksCollection.findOne(query);
       res.send(result);
     });
-    app.patch("/books/:id", async (req, res) => {
+    app.patch("/books/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const newBookData = req.body;
       const query = { _id: new ObjectId(id) };
@@ -208,7 +216,7 @@ async function run() {
       const result = await booksCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
-    app.delete("/books/:id", async (req, res) => {
+    app.delete("/books/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await booksCollection.deleteOne(query);
