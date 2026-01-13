@@ -70,6 +70,9 @@ async function run() {
     const usersCollection = db.collection("users");
     const genresCollection = db.collection("genres");
     const booksCollection = db.collection("books");
+    const addToReadCollection = db.collection("addToRead");
+    const currentlyReadingCollection = db.collection("currently-reading");
+    const readCollection = db.collection("read");
 
     // user related apis
     app.post("/user/signup", async (req, res) => {
@@ -194,7 +197,7 @@ async function run() {
       const result = await booksCollection.insertOne(book);
       res.send(result);
     });
-    app.get("/books", verifyToken, async (req, res) => {
+    app.get("/books", async (req, res) => {
       const { page = 1, limit = 10, search = "", genre, sort } = req.query;
       // console.log(req.query);
       const skip = (Number(page) - 1) * Number(limit);
@@ -228,10 +231,70 @@ async function run() {
         totalPage: Math.ceil(total / limit),
       });
     });
+    app.get("/books/reviews", async (req, res) => {
+      const result = await booksCollection
+        .aggregate([
+          { $match: { reviews: { $exists: true, $not: { $size: 0 } } } },
+          { $unwind: "$reviews" },
+          { $match: { "reviews.status": "pending" } },
+
+          {
+            $project: {
+              _id: 0,
+              bookId: "$_id",
+              rating: "$reviews.rating",
+              comment: "$reviews.comment",
+              name: "$reviews.name",
+              email: "$reviews.email",
+              date: "$reviews.date",
+              status: "$reviews.status",
+            },
+          },
+        ])
+        .toArray();
+      res.send(result);
+    });
+    app.patch("/reviews/approve", verifyToken, async (req, res) => {
+      const { bookId, userEmail, reviewDate } = req.body;
+
+      const query = {
+        _id: new ObjectId(bookId),
+        reviews: {
+          $elemMatch: {
+            email: userEmail,
+            date: reviewDate,
+          },
+        },
+      };
+
+      const updateDoc = {
+        $set: { "reviews.$.status": "approved" },
+      };
+
+      try {
+        const result = await booksCollection.updateOne(query, updateDoc);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Update fail hoyeche" });
+      }
+    });
     app.get("/books/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await booksCollection.findOne(query);
+      res.send(result);
+    });
+    app.patch("/books/review/:id", verifyToken, async (req, res) => {
+      const { id } = req.params;
+      const newReview = req.body;
+      console.log(newReview);
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $push: {
+          reviews: newReview,
+        },
+      };
+      const result = await booksCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
     app.patch("/books/:id", verifyToken, verifyAdmin, async (req, res) => {
@@ -246,12 +309,181 @@ async function run() {
       const result = await booksCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
+
     app.delete("/books/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await booksCollection.deleteOne(query);
       res.send(result);
     });
+
+    // shelf related api
+    app.post("/shelf/want-to-read", async (req, res) => {
+      const bookData = req.body;
+      const email = bookData.email;
+      const bookId = bookData.bookId;
+      const isExisting = await addToReadCollection.findOne({ email, bookId });
+      if (isExisting) {
+        return res.send("This book is already in your shelf");
+      }
+      const result = await addToReadCollection.insertOne(bookData);
+      res.send(result);
+    });
+    app.post(`/shelf/currently-reading`, async (req, res) => {
+      const bookData = req.body;
+      const email = bookData.email;
+      const bookId = bookData.bookId;
+      const isExisting = await currentlyReadingCollection.findOne({
+        email,
+        bookId,
+      });
+      if (isExisting) {
+        return res.send("This book is already in your shelf");
+      }
+      const result = await currentlyReadingCollection.insertOne(bookData);
+      res.send(result);
+    });
+    app.post(`/shelf/read`, async (req, res) => {
+      const bookData = req.body;
+      const email = bookData.email;
+      const bookId = bookData.bookId;
+      const isExisting = await readCollection.findOne({
+        email,
+        bookId,
+      });
+      if (isExisting) {
+        return res.send("This book is already in your shelf");
+      }
+      const result = await readCollection.insertOne(bookData);
+      res.send(result);
+    });
+    app.get("/want-to-read", async (req, res) => {
+      const { email } = req.query;
+      const result = await addToReadCollection
+        .aggregate([
+          { $match: { email: email } },
+
+          {
+            $addFields: {
+              bookId: { $toObjectId: "$bookId" },
+            },
+          },
+
+          {
+            $lookup: {
+              from: "books",
+              localField: "bookId",
+              foreignField: "_id",
+              as: "bookData",
+            },
+          },
+
+          { $unwind: "$bookData" },
+        ])
+        .toArray();
+      res.send(result);
+    });
+    app.get("/currently-reading", async (req, res) => {
+      const { email } = req.query;
+      const result = await currentlyReadingCollection
+        .aggregate([
+          { $match: { email: email } },
+          {
+            $addFields: {
+              bookId: { $toObjectId: "$bookId" },
+            },
+          },
+          {
+            $lookup: {
+              from: "books",
+              localField: "bookId",
+              foreignField: "_id",
+              as: "bookData",
+            },
+          },
+
+          { $unwind: "$bookData" },
+        ])
+        .toArray();
+      res.send(result);
+    });
+    app.get("/read", async (req, res) => {
+      const { email } = req.query;
+      const result = await readCollection
+        .aggregate([
+          { $match: { email: email } },
+          {
+            $addFields: {
+              bookId: { $toObjectId: "$bookId" },
+            },
+          },
+          {
+            $lookup: {
+              from: "books",
+              localField: "bookId",
+              foreignField: "_id",
+              as: "bookData",
+            },
+          },
+
+          { $unwind: "$bookData" },
+        ])
+        .toArray();
+      res.send(result);
+    });
+    // stats related apis
+    app.get("/genre-stats", async (req, res) => {
+      const stats = await booksCollection
+        .aggregate([
+          {
+            $unwind: "$genres",
+          },
+
+          {
+            $group: {
+              _id: "$genres",
+              count: { $sum: 1 },
+            },
+          },
+
+          {
+            $project: {
+              name: "$_id",
+              count: 1,
+              _id: 0,
+            },
+          },
+
+          { $sort: { count: -1 } },
+        ])
+        .toArray();
+      res.send(stats);
+    });
+    app.get("/user-register-stats", async (req, res) => {
+      const trend = await usersCollection
+        .aggregate([
+          {
+            $group: {
+              _id: {
+                $dateToString: { format: "%d-%m-%Y", date: "$createdAt" },
+              },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 } },
+          {
+            $project: {
+              date: "$_id",
+              users: "$count",
+              _id: 0,
+            },
+          },
+        ])
+        .toArray();
+
+      res.send(trend);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
