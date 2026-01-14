@@ -45,7 +45,6 @@ const verifyToken = (req, res, next) => {
 };
 
 const verifyAdmin = (req, res, next) => {
-  // console.log(req.role);
   if (req.user.role !== "admin") {
     return res.status(403).json({ message: "Forbidden" });
   }
@@ -157,7 +156,6 @@ async function run() {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const role = req.body;
-      console.log(role);
       const updatedDoc = { $set: { role: role?.role } };
       const result = await usersCollection.updateOne(query, updatedDoc);
       res.send(result);
@@ -176,7 +174,6 @@ async function run() {
     app.patch("/genres/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const newGenre = req.body;
-      console.log(newGenre);
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
         $set: { ...newGenre },
@@ -197,9 +194,8 @@ async function run() {
       const result = await booksCollection.insertOne(book);
       res.send(result);
     });
-    app.get("/books", async (req, res) => {
+    app.get("/books", verifyToken, async (req, res) => {
       const { page = 1, limit = 10, search = "", genre, sort } = req.query;
-      // console.log(req.query);
       const skip = (Number(page) - 1) * Number(limit);
       let query = {};
       if (search) {
@@ -231,7 +227,7 @@ async function run() {
         totalPage: Math.ceil(total / limit),
       });
     });
-    app.get("/books/reviews", async (req, res) => {
+    app.get("/books/reviews", verifyToken, async (req, res) => {
       const result = await booksCollection
         .aggregate([
           { $match: { reviews: { $exists: true, $not: { $size: 0 } } } },
@@ -287,7 +283,6 @@ async function run() {
     app.patch("/books/review/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const newReview = req.body;
-      console.log(newReview);
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
         $push: {
@@ -318,7 +313,7 @@ async function run() {
     });
 
     // shelf related api
-    app.post("/shelf/want-to-read", async (req, res) => {
+    app.post("/shelf/want-to-read", verifyToken, async (req, res) => {
       const bookData = req.body;
       const email = bookData.email;
       const bookId = bookData.bookId;
@@ -329,7 +324,7 @@ async function run() {
       const result = await addToReadCollection.insertOne(bookData);
       res.send(result);
     });
-    app.post(`/shelf/currently-reading`, async (req, res) => {
+    app.post(`/shelf/currently-reading`, verifyToken, async (req, res) => {
       const bookData = req.body;
       const email = bookData.email;
       const bookId = bookData.bookId;
@@ -343,7 +338,7 @@ async function run() {
       const result = await currentlyReadingCollection.insertOne(bookData);
       res.send(result);
     });
-    app.post(`/shelf/read`, async (req, res) => {
+    app.post(`/shelf/read`, verifyToken, async (req, res) => {
       const bookData = req.body;
       const email = bookData.email;
       const bookId = bookData.bookId;
@@ -357,7 +352,7 @@ async function run() {
       const result = await readCollection.insertOne(bookData);
       res.send(result);
     });
-    app.get("/want-to-read", async (req, res) => {
+    app.get("/want-to-read", verifyToken, async (req, res) => {
       const { email } = req.query;
       const result = await addToReadCollection
         .aggregate([
@@ -383,7 +378,7 @@ async function run() {
         .toArray();
       res.send(result);
     });
-    app.get("/currently-reading", async (req, res) => {
+    app.get("/currently-reading", verifyToken, async (req, res) => {
       const { email } = req.query;
       const result = await currentlyReadingCollection
         .aggregate([
@@ -407,7 +402,7 @@ async function run() {
         .toArray();
       res.send(result);
     });
-    app.get("/read", async (req, res) => {
+    app.get("/read", verifyToken, async (req, res) => {
       const { email } = req.query;
       const result = await readCollection
         .aggregate([
@@ -431,8 +426,9 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
     // stats related apis
-    app.get("/genre-stats", async (req, res) => {
+    app.get("/genre-stats", verifyToken, verifyAdmin, async (req, res) => {
       const stats = await booksCollection
         .aggregate([
           {
@@ -459,39 +455,59 @@ async function run() {
         .toArray();
       res.send(stats);
     });
-    app.get("/user-register-stats", async (req, res) => {
-      const trend = await usersCollection
-        .aggregate([
-          {
-            $group: {
-              _id: {
-                $dateToString: { format: "%d-%m-%Y", date: "$createdAt" },
+    app.get(
+      "/user-register-stats",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const trend = await usersCollection
+          .aggregate([
+            {
+              $group: {
+                _id: {
+                  $dateToString: { format: "%d-%m-%Y", date: "$createdAt" },
+                },
+                count: { $sum: 1 },
               },
-              count: { $sum: 1 },
             },
-          },
-          { $sort: { _id: 1 } },
-          {
-            $project: {
-              date: "$_id",
-              users: "$count",
-              _id: 0,
+            { $sort: { _id: 1 } },
+            {
+              $project: {
+                date: "$_id",
+                users: "$count",
+                _id: 0,
+              },
             },
-          },
-        ])
-        .toArray();
+          ])
+          .toArray();
 
-      res.send(trend);
+        res.send(trend);
+      }
+    );
+    app.get("/shelf-book-count", verifyToken, async (req, res) => {
+      const { email } = req.query;
+      const [currentlyReading, addToRead, read] = await Promise.all([
+        db.collection("currently-reading").countDocuments({ email }),
+        db.collection("addToRead").countDocuments({ email }),
+        db.collection("read").countDocuments({ email }),
+      ]);
+      const result = [
+        {
+          name: "Currently Reading",
+          count: currentlyReading,
+        },
+        { name: "Want To Read", count: addToRead },
+        { name: "Read", count: read },
+      ];
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
   }
 }
 run().catch(console.dir);
