@@ -118,7 +118,9 @@ async function run() {
       }
       const user = await usersCollection.findOne({ email });
       if (!user) {
-        return res.status(401).send({ message: "Invalid user credentials" });
+        return res
+          .status(401)
+          .send({ message: "User not exist with this email" });
       }
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
